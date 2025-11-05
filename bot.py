@@ -4,8 +4,8 @@ from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
 
 # === ВАШИ ДАННЫЕ ===
-BOT_TOKEN = "8501908088:AAFh90gv00q49XxZQu-vX3jjCinBsmXSymo"
-YOUR_CHAT_ID = 539132086
+BOT_TOKEN = "8501908088:AAFh90gv0Og49XxZQu-vX3jjCinBsmX5ymo"
+YOUR_CHAT_ID = 530132086
 # === КОНЕЦ ===
 
 # Настройка логирования
