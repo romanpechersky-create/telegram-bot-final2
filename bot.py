@@ -2,7 +2,7 @@ import logging
 import os
 from flask import Flask, request
 from telegram import Update, Bot
-from telegram.ext import Application, MessageHandler, filters, ContextTypes
+from telegram.ext import Updater, MessageHandler, Filters, CallbackContext, CommandHandler
 
 # === ВАШИ ДАННЫЕ ===
 BOT_TOKEN = "8501908088:AAFh90gv0Og49XxZQu-vX3jjCinBsmX5ymo"
@@ -17,36 +17,36 @@ logging.basicConfig(
 
 app = Flask(__name__)
 
-# Создаем Application
-application = Application.builder().token(BOT_TOKEN).build()
+# Создаем бота
+bot = Bot(token=BOT_TOKEN)
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def handle_message(update: Update, context: CallbackContext):
     """Обрабатывает все входящие сообщения"""
     try:
         message = update.message
         
         if message.text:
-            await context.bot.send_message(
+            context.bot.send_message(
                 chat_id=YOUR_CHAT_ID,
                 text=f"📨 Новое анонимное сообщение:\n\n{message.text}"
             )
-            await message.reply_text("✅ Ваше анонимное сообщение доставлено! Спасибо.")
+            message.reply_text("✅ Ваше анонимное сообщение доставлено! Спасибо.")
             
         elif message.photo:
-            photo_file = await message.photo[-1].get_file()
-            photo_data = await photo_file.download_as_bytearray()
+            photo_file = message.photo[-1].get_file()
+            photo_data = photo_file.download_as_bytearray()
             
-            await context.bot.send_photo(
+            context.bot.send_photo(
                 chat_id=YOUR_CHAT_ID,
                 photo=photo_data,
                 caption="📷 Новое анонимное фото"
             )
-            await message.reply_text("✅ Ваше анонимное изображение доставлено! Спасибо.")
+            message.reply_text("✅ Ваше анонимное изображение доставлено! Спасибо.")
             
     except Exception as e:
         logging.error(f"Ошибка: {e}")
 
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def start_command(update: Update, context: CallbackContext):
     """Команда /start"""
     welcome_text = """
 👋 Привет! Я бот для отправления анонимных сообщений в Совет Управления сообществом "БУРОВИЧОК"!
@@ -55,11 +55,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 🔒 Все сообщения анонимны.
     """
-    await update.message.reply_text(welcome_text)
-
-# Добавляем обработчики
-application.add_handler(MessageHandler(filters.COMMAND, start_command))
-application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
+    update.message.reply_text(welcome_text)
 
 @app.route('/')
 def home():
@@ -70,12 +66,21 @@ def health():
     return "OK", 200
 
 @app.route('/webhook', methods=['POST'])
-async def webhook():
+def webhook():
     """Эндпоинт для вебхуков от Telegram"""
     try:
-        json_data = await request.get_json()
-        update = Update.de_json(json_data, application.bot)
-        await application.process_update(update)
+        # Создаем updater для обработки обновлений
+        updater = Updater(bot=bot, use_context=True)
+        dispatcher = updater.dispatcher
+        
+        # Добавляем обработчики
+        dispatcher.add_handler(CommandHandler("start", start_command))
+        dispatcher.add_handler(MessageHandler(Filters.all & ~Filters.command, handle_message))
+        
+        # Обрабатываем обновление
+        update = Update.de_json(request.get_json(), bot)
+        dispatcher.process_update(update)
+        
         return "OK", 200
     except Exception as e:
         logging.error(f"Ошибка в webhook: {e}")
@@ -85,10 +90,12 @@ def set_webhook():
     """Устанавливает вебхук при запуске"""
     try:
         webhook_url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/webhook"
-        application.bot.set_webhook(webhook_url)
+        bot.set_webhook(webhook_url)
         logging.info(f"Webhook установлен: {webhook_url}")
+        print(f"✅ Webhook установлен: {webhook_url}")
     except Exception as e:
         logging.error(f"Ошибка установки webhook: {e}")
+        print(f"❌ Ошибка установки webhook: {e}")
 
 if __name__ == '__main__':
     # Устанавливаем вебхук при запуске
@@ -96,4 +103,5 @@ if __name__ == '__main__':
     
     # Запускаем Flask приложение
     port = int(os.environ.get('PORT', 10000))
+    print(f"🚀 Запуск сервера на порту {port}")
     app.run(host='0.0.0.0', port=port, debug=False)
