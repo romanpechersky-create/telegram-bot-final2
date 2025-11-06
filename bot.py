@@ -1,11 +1,11 @@
 import logging
-import os
-import asyncio
+import threading
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
-from aiohttp import web
+from flask import Flask
+import os
 
-# === ВАШИ ДАННЫЫЕ ===
+# === ВАШИ ДАННЫЕ ===
 BOT_TOKEN = "8501908088:AAFh90gv0Og49XxZQu-vX3jjCinBsmX5ymo"
 YOUR_CHAT_ID = 530132086
 # === КОНЕЦ ===
@@ -15,6 +15,17 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+
+# Flask app для health checks
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "🤖 Бот работает! ✅"
+
+@app.route('/health')
+def health():
+    return "OK", 200
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обрабатывает все входящие сообщения"""
@@ -53,29 +64,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     await update.message.reply_text(welcome_text)
 
-# Простой HTTP сервер для health checks
-async def health_check(request):
-    return web.Response(text="🤖 Бот работает! ✅")
-
-async def start_web_server():
-    """Запускает простой HTTP сервер для health checks"""
-    app = web.Application()
-    app.router.add_get('/', health_check)
-    app.router.add_get('/health', health_check)
-    
-    port = int(os.environ.get('PORT', 10000))
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
-    print(f"🌐 HTTP сервер запущен на порту {port}")
-
-async def main():
-    """Основная асинхронная функция"""
-    # Запускаем HTTP сервер
-    await start_web_server()
-    
-    # Запускаем Telegram бота
+def run_bot():
+    """Запуск бота в отдельном потоке"""
     application = Application.builder().token(BOT_TOKEN).build()
     
     application.add_handler(MessageHandler(filters.COMMAND, start_command))
@@ -84,7 +74,18 @@ async def main():
     print("🤖 Бот запущен и готов к работе! ✅")
     print("⚡ Работает 24/7 на Render.com")
     
-    await application.run_polling()
+    application.run_polling()
+
+def main():
+    """Основная функция"""
+    # Запускаем бота в отдельном потоке
+    bot_thread = threading.Thread(target=run_bot)
+    bot_thread.daemon = True
+    bot_thread.start()
+    
+    # Запускаем Flask сервер
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port, debug=False)
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    main()
