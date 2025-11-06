@@ -1,7 +1,9 @@
 import logging
+import os
 import asyncio
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
+from flask import Flask
 
 # === ВАШИ ДАННЫЕ ===
 BOT_TOKEN = "8501908088:AAFh90gv0Og49XxZQu-vX3jjCinBsmX5ymo"
@@ -13,6 +15,17 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+
+# Создаем Flask приложение для здоровья
+app = Flask(__name__)
+
+@app.route('/')
+def health_check():
+    return "🤖 Бот работает! ✅", 200
+
+@app.route('/health')
+def health():
+    return "OK", 200
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обрабатывает все входящие сообщения"""
@@ -51,8 +64,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     await update.message.reply_text(welcome_text)
 
-def main():
-    """Запуск бота"""
+async def start_bot():
+    """Запуск Telegram бота"""
     application = Application.builder().token(BOT_TOKEN).build()
     
     application.add_handler(MessageHandler(filters.COMMAND, start_command))
@@ -61,7 +74,20 @@ def main():
     print("🤖 Бот запущен и готов к работе! ✅")
     print("⚡ Работает 24/7 на Render.com")
     
-    application.run_polling()
+    await application.run_polling()
+
+def main():
+    """Основная функция запуска"""
+    # Запускаем бота в отдельной задаче
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    # Запускаем бота асинхронно
+    bot_task = asyncio.ensure_future(start_bot())
+    
+    # Запускаем Flask сервер на порту из переменной окружения
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port, debug=False)
 
 if __name__ == '__main__':
     main()
