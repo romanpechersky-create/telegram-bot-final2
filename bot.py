@@ -1,9 +1,8 @@
 import logging
-import threading
-from telegram import Update
-from telegram.ext import Application, MessageHandler, filters, ContextTypes
-from flask import Flask
 import os
+from flask import Flask, request
+from telegram import Update, Bot
+from telegram.ext import Application, MessageHandler, filters, ContextTypes
 
 # === ВАШИ ДАННЫЕ ===
 BOT_TOKEN = "8501908088:AAFh90gv0Og49XxZQu-vX3jjCinBsmX5ymo"
@@ -16,16 +15,10 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# Flask app для health checks
 app = Flask(__name__)
 
-@app.route('/')
-def home():
-    return "🤖 Бот работает! ✅"
-
-@app.route('/health')
-def health():
-    return "OK", 200
+# Создаем Application
+application = Application.builder().token(BOT_TOKEN).build()
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обрабатывает все входящие сообщения"""
@@ -64,28 +57,43 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     await update.message.reply_text(welcome_text)
 
-def run_bot():
-    """Запуск бота в отдельном потоке"""
-    application = Application.builder().token(BOT_TOKEN).build()
-    
-    application.add_handler(MessageHandler(filters.COMMAND, start_command))
-    application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
-    
-    print("🤖 Бот запущен и готов к работе! ✅")
-    print("⚡ Работает 24/7 на Render.com")
-    
-    application.run_polling()
+# Добавляем обработчики
+application.add_handler(MessageHandler(filters.COMMAND, start_command))
+application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
 
-def main():
-    """Основная функция"""
-    # Запускаем бота в отдельном потоке
-    bot_thread = threading.Thread(target=run_bot)
-    bot_thread.daemon = True
-    bot_thread.start()
-    
-    # Запускаем Flask сервер
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+@app.route('/')
+def home():
+    return "🤖 Бот работает! ✅ Webhook версия."
+
+@app.route('/health')
+def health():
+    return "OK", 200
+
+@app.route('/webhook', methods=['POST'])
+async def webhook():
+    """Эндпоинт для вебхуков от Telegram"""
+    try:
+        json_data = await request.get_json()
+        update = Update.de_json(json_data, application.bot)
+        await application.process_update(update)
+        return "OK", 200
+    except Exception as e:
+        logging.error(f"Ошибка в webhook: {e}")
+        return "Error", 500
+
+def set_webhook():
+    """Устанавливает вебхук при запуске"""
+    try:
+        webhook_url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/webhook"
+        application.bot.set_webhook(webhook_url)
+        logging.info(f"Webhook установлен: {webhook_url}")
+    except Exception as e:
+        logging.error(f"Ошибка установки webhook: {e}")
 
 if __name__ == '__main__':
-    main()
+    # Устанавливаем вебхук при запуске
+    set_webhook()
+    
+    # Запускаем Flask приложение
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port, debug=False)
